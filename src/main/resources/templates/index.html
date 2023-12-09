@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Sensor Data Dashboard</title>
+    <style>
+        /* Define colors for each sensor type */
+        .sensor-card[data-type="HUMIDITY"] { background-color: #87CEEB; }
+        .sensor-card[data-type="TEMPERATURE"] { background-color: #FF6347; }
+        .sensor-card[data-type="PRESSURE"] { background-color: #98FB98; }
+        .sensor-card[data-type="WIND-DIRECTION"] { background-color: #FFD700; }
+        .sensor-card[data-type="WIND-SPEED"] { background-color: #7CFC00; }
+        .sensor-card[data-type="RAINFALL"] { background-color: #00CED1; }
+        .sensor-card[data-type="SOLAR-RADIATION"] { background-color: #FFA07A; }
+        .sensor-card[data-type="CO2"] { background-color: #00FF00; }
+        .sensor-card[data-type="O2"] { background-color: #8A2BE2; }
+    </style>
+</head>
+<body class="p-10">
+
+<h1 class="mb-4 text-3xl font-bold">Sensor Data Dashboard</h1>
+
+<div class="container mx-auto">
+    <div class="grid grid-cols-3 gap-6 w-full" id="cityContainer"></div>
+</div>
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+<script src="/webjars/sockjs-client/sockjs.min.js"></script>
+<script src="/webjars/stomp-websocket/stomp.min.js"></script>
+<script>
+    let socket = new SockJS('/ws');
+    let stompClient = Stomp.over(socket);
+
+    // Keep track of created city cards
+    let cityCards = {};
+
+    stompClient.connect({}, function (frame) {
+        console.log('WebSocket connection opened:', frame);
+
+        stompClient.subscribe('/topic/humidity', createCard);
+        stompClient.subscribe('/topic/temperature', createCard);
+        stompClient.subscribe('/topic/pressure', createCard);
+        stompClient.subscribe('/topic/wind-direction', createCard);
+        stompClient.subscribe('/topic/wind-speed', createCard);
+        stompClient.subscribe('/topic/rainfall', createCard);
+        stompClient.subscribe('/topic/solar-radiation', createCard);
+        stompClient.subscribe('/topic/co2', createCard);
+        stompClient.subscribe('/topic/o2', createCard);
+    });
+
+    stompClient.onclose = function (event) {
+        console.log('WebSocket connection closed:', event);
+    };
+
+    function createCityCard(cityName) {
+        let cityCardDiv = $('<div>').attr('id', 'city-' + cityName).addClass('block p-6 border border-gray-200 rounded-lg shadow');
+        cityCardDiv.html('<h2 class="mb-2 text-2xl font-bold tracking-tight text-gray-900">' + cityName + '</h2><div class="grid grid-cols-2 gap-4"></div>');
+        $('#cityContainer').append(cityCardDiv);
+
+        // Keep track of the created city card
+        cityCards[cityName] = true;
+    }
+
+    function updateOrCreateSensorCard(cityName, sensorType, sensorValue, sensorTimestamp) {
+        let cityCard = $('#city-' + cityName);
+        let sensorDataGridDiv = cityCard.find('.grid');
+
+        // Check if the sensor card exists, update if yes, create if not
+        let existingSensorCard = sensorDataGridDiv.find('.sensor-card[data-type="' + sensorType + '"]');
+        if (existingSensorCard.length) {
+            // Update existing sensor card
+            existingSensorCard.find('.sensor-value').html('<strong>Sensor Value: </strong>' + sensorValue);
+            existingSensorCard.find('.sensor-timestamp').html('<strong>Sensor Timestamp: </strong>' + sensorTimestamp);
+        } else {
+            // Create new sensor card
+            createSensorCard(sensorType, sensorValue, sensorTimestamp, sensorDataGridDiv);
+        }
+    }
+
+    function createSensorCard(sensorType, sensorValue, sensorTimestamp, sensorDataGridDiv) {
+        let sensorCardDiv = $('<div>').addClass('sensor-card block p-6 border border-gray-200 rounded-lg shadow')
+            .attr('data-type', sensorType)
+            .html('<h4 class="text-lg font-bold">' + sensorType + '</h4>' +
+                '<p class="sensor-value flex flex-col items-start font-normal text-gray-700"><strong>Sensor Value:</strong> ' + sensorValue + '</p>' +
+                '<p class="sensor-timestamp flex flex-col items-start font-normal text-gray-700"><strong>Sensor Timestamp:</strong> ' + sensorTimestamp + '</p>');
+
+        sensorDataGridDiv.append(sensorCardDiv);
+    }
+
+    function createCard(message) {
+        let data = JSON.parse(message.body);
+        let cityName = data.sensorLocation;
+
+        // Check if the city card exists, create one if not
+        if (!cityCards[cityName]) {
+            createCityCard(cityName);
+        }
+
+        // Update or create sensor card within the city card
+        updateOrCreateSensorCard(cityName, data.sensorType, Number(data.sensorValue).toFixed(2), data.sensorTimestamp);
+    }
+</script>
+</body>
+</html>
